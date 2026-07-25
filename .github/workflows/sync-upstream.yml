@@ -1,0 +1,48 @@
+name: Sync upstream Sublink Worker
+
+on:
+  schedule:
+    - cron: '30 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Sync upstream main
+        id: sync
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote add upstream https://github.com/7Sageer/sublink-worker.git
+          git fetch upstream main
+          git checkout -B main origin/main
+
+          BEFORE=$(git rev-parse HEAD)
+          git merge --no-edit upstream/main
+          AFTER=$(git rev-parse HEAD)
+
+          if [ "$BEFORE" = "$AFTER" ]; then
+            echo "No upstream updates found."
+            echo "updated=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git push origin main
+          echo "updated=true" >> "$GITHUB_OUTPUT"
+
+      - name: Trigger Cloudflare deployment
+        if: steps.sync.outputs.updated == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --method POST "repos/${{ github.repository }}/dispatches" \
+            -f event_type='upstream-sync'
