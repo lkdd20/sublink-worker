@@ -1,4 +1,4 @@
-name: Build DualApp999 APK
+name: Build DualApp999 v1.3 APK
 
 on:
   pull_request:
@@ -21,13 +21,39 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Build APK
+      - name: Prepare v1.3 source
         run: |
           base64 -d dualapp-build/project-v1.2.zip.b64 > /tmp/project.zip
           unzip -q /tmp/project.zip -d /tmp/project
           cd /tmp/project/dualapp999-v1.2-project
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('app/src/main/java/com/kuku/dualapp/MainActivity.java')
+          s = p.read_text()
+          s = s.replace('import android.widget.EditText;\n', 'import android.widget.EditText;\nimport android.widget.HorizontalScrollView;\nimport android.widget.ImageView;\n')
+          s = s.replace('import android.widget.Toast;\n', 'import android.widget.Toast;\nimport android.text.TextUtils;\n')
+          s = s.replace('    private TextView selectedView;\n', '    private TextView selectedView;\n    private TextView clonedHeaderView;\n    private LinearLayout clonedAppsStrip;\n')
+          old = '''        selectedView = new TextView(this);\n        selectedView.setText("已选择 0 个应用");'''
+          new = '''        clonedHeaderView = new TextView(this);\n        clonedHeaderView.setText("已双开应用 (0)");\n        clonedHeaderView.setTextSize(14);\n        clonedHeaderView.setTextColor(Color.rgb(35, 35, 35));\n        clonedHeaderView.setPadding(dp(16), dp(8), dp(16), dp(4));\n        root.addView(clonedHeaderView, new LinearLayout.LayoutParams(\n                LinearLayout.LayoutParams.MATCH_PARENT, dp(34)));\n\n        HorizontalScrollView clonedScroll = new HorizontalScrollView(this);\n        clonedScroll.setHorizontalScrollBarEnabled(false);\n        clonedScroll.setFillViewport(true);\n        clonedAppsStrip = new LinearLayout(this);\n        clonedAppsStrip.setOrientation(LinearLayout.HORIZONTAL);\n        clonedAppsStrip.setGravity(Gravity.CENTER_VERTICAL);\n        clonedAppsStrip.setPadding(dp(10), dp(2), dp(10), dp(4));\n        clonedScroll.addView(clonedAppsStrip, new HorizontalScrollView.LayoutParams(\n                HorizontalScrollView.LayoutParams.WRAP_CONTENT,\n                HorizontalScrollView.LayoutParams.MATCH_PARENT));\n        root.addView(clonedScroll, new LinearLayout.LayoutParams(\n                LinearLayout.LayoutParams.MATCH_PARENT, dp(88)));\n\n        selectedView = new TextView(this);\n        selectedView.setText("已选择 0 个应用");'''
+          if old not in s: raise SystemExit('bottom insertion point missing')
+          s = s.replace(old, new)
+          s = s.replace('''                setActionsEnabled(true);\n                updateSelectionState();\n            });\n        });\n    }\n\n    private void refreshCloneStatus()''', '''                setActionsEnabled(true);\n                updateSelectionState();\n                updateClonedAppsBar();\n            });\n        });\n    }\n\n    private void refreshCloneStatus()''')
+          s = s.replace('''                adapter.notifyDataSetChanged();\n                statusView.setText("状态已刷新 · 双开用户：" + cloneUserId);''', '''                adapter.notifyDataSetChanged();\n                updateClonedAppsBar();\n                statusView.setText("状态已刷新 · 双开用户：" + cloneUserId);''')
+          s = s.replace('''                adapter.clearSelections();\n                adapter.notifyDataSetChanged();\n                setActionsEnabled(true);''', '''                adapter.clearSelections();\n                adapter.notifyDataSetChanged();\n                updateClonedAppsBar();\n                setActionsEnabled(true);''')
+          marker = '    private void updateSelectionState() {\n'
+          method = '''    private void updateClonedAppsBar() {\n        if (clonedAppsStrip == null || clonedHeaderView == null) return;\n        clonedAppsStrip.removeAllViews();\n        List<AppEntry> clonedApps = new ArrayList<>();\n        for (AppEntry app : apps) if (app.cloned) clonedApps.add(app);\n        clonedHeaderView.setText("已双开应用 (" + clonedApps.size() + ") · 点击图标选择");\n        if (clonedApps.isEmpty()) {\n            TextView empty = new TextView(this);\n            empty.setText("暂无已双开的应用");\n            empty.setTextSize(13);\n            empty.setTextColor(Color.rgb(130, 130, 130));\n            empty.setGravity(Gravity.CENTER_VERTICAL);\n            empty.setPadding(dp(6), 0, dp(16), 0);\n            clonedAppsStrip.addView(empty, new LinearLayout.LayoutParams(\n                    dp(220), LinearLayout.LayoutParams.MATCH_PARENT));\n            return;\n        }\n        for (AppEntry app : clonedApps) {\n            LinearLayout card = new LinearLayout(this);\n            card.setOrientation(LinearLayout.VERTICAL);\n            card.setGravity(Gravity.CENTER);\n            card.setPadding(dp(5), dp(3), dp(5), dp(3));\n            ImageView icon = new ImageView(this);\n            icon.setImageDrawable(app.icon);\n            card.addView(icon, new LinearLayout.LayoutParams(dp(44), dp(44)));\n            TextView name = new TextView(this);\n            name.setText(app.label);\n            name.setTextSize(11);\n            name.setTextColor(Color.rgb(45, 45, 45));\n            name.setGravity(Gravity.CENTER);\n            name.setSingleLine(true);\n            name.setEllipsize(TextUtils.TruncateAt.END);\n            card.addView(name, new LinearLayout.LayoutParams(dp(70), dp(26)));\n            card.setContentDescription("已双开：" + app.label);\n            card.setOnClickListener(v -> selectOnly(app));\n            LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(dp(78), dp(78));\n            params.setMargins(dp(2), 0, dp(2), 0);\n            clonedAppsStrip.addView(card, params);\n        }\n    }\n\n    private void selectOnly(AppEntry target) {\n        for (AppEntry app : apps) app.selected = app == target;\n        adapter.notifyDataSetChanged();\n        updateSelectionState();\n        toast("已选择：" + target.label);\n    }\n\n'''
+          if marker not in s: raise SystemExit('method insertion point missing')
+          s = s.replace(marker, method + marker)
+          p.write_text(s)
+          g = Path('app/build.gradle.kts')
+          t = g.read_text().replace('versionCode = 2', 'versionCode = 3').replace('versionName = "1.2"', 'versionName = "1.3"')
+          g.write_text(t)
+          PY
+      - name: Build APK
+        run: |
+          cd /tmp/project/dualapp999-v1.2-project
           gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: DualApp999-v1.2-debug
+          name: DualApp999-v1.3-debug
           path: /tmp/project/dualapp999-v1.2-project/app/build/outputs/apk/debug/*.apk
