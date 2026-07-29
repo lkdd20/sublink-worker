@@ -1,4 +1,4 @@
-name: Build DualApp999 v1.5 APK
+name: Build DualApp999 v1.6 APK
 
 on:
   pull_request:
@@ -21,7 +21,7 @@ jobs:
       - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
-      - name: Prepare v1.5 source
+      - name: Prepare v1.6 source
         run: |
           base64 -d dualapp-build/project-v1.2.zip.b64 > /tmp/project.zip
           unzip -q /tmp/project.zip -d /tmp/project
@@ -31,9 +31,11 @@ jobs:
           p=Path('app/src/main/java/com/kuku/dualapp/MainActivity.java')
           s=p.read_text()
 
+          s=s.replace('import android.os.Looper;\n', 'import android.os.Looper;\nimport android.os.Build;\n')
+          s=s.replace('import android.view.View;\n', 'import android.view.View;\nimport android.view.WindowInsets;\n')
           s=s.replace('import android.widget.EditText;\n', 'import android.widget.EditText;\nimport android.widget.ImageView;\nimport android.widget.ScrollView;\n')
           s=s.replace('    private TextView selectedView;\n', '''    private TextView selectedView;\n    private TextView clonedHeaderView;\n    private LinearLayout clonedAppsList;\n    private ScrollView clonedAppsScroll;\n    private LinearLayout clonedBatchActions;\n    private Button toggleClonedButton;\n    private boolean clonedAppsExpanded = false;\n''')
-          s=s.replace('''        super.onCreate(savedInstanceState);\n        setContentView(createContentView());''', '''        super.onCreate(savedInstanceState);\n        getWindow().setStatusBarColor(Color.WHITE);\n        getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);\n        setContentView(createContentView());''')
+          s=s.replace('''        super.onCreate(savedInstanceState);\n        setContentView(createContentView());''', '''        super.onCreate(savedInstanceState);\n        getWindow().setNavigationBarColor(Color.WHITE);\n        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {\n            getWindow().setDecorFitsSystemWindows(false);\n            getWindow().setStatusBarColor(Color.TRANSPARENT);\n            android.view.WindowInsetsController controller = getWindow().getInsetsController();\n            if (controller != null) {\n                int appearance = android.view.WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS\n                        | android.view.WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS;\n                controller.setSystemBarsAppearance(appearance, appearance);\n            }\n        } else {\n            getWindow().setStatusBarColor(Color.WHITE);\n            getWindow().getDecorView().setSystemUiVisibility(View.SYSTEM_UI_FLAG_LIGHT_STATUS_BAR);\n        }\n\n        View content = createContentView();\n        setContentView(content);\n        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {\n            content.setOnApplyWindowInsetsListener((view, insets) -> {\n                android.graphics.Insets bars = insets.getInsets(\n                        WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());\n                int top = bars.top;\n                if (top <= 0) {\n                    int resourceId = getResources().getIdentifier(\n                            "status_bar_height", "dimen", "android");\n                    if (resourceId > 0) top = getResources().getDimensionPixelSize(resourceId);\n                }\n                view.setPadding(bars.left, top, bars.right, bars.bottom);\n                return insets;\n            });\n            content.post(content::requestApplyInsets);\n        }''')
 
           old='''        selectedView = new TextView(this);\n        selectedView.setText("已选择 0 个应用");'''
           new='''        LinearLayout clonedHeaderRow = new LinearLayout(this);\n        clonedHeaderRow.setOrientation(LinearLayout.HORIZONTAL);\n        clonedHeaderRow.setGravity(Gravity.CENTER_VERTICAL);\n        clonedHeaderRow.setPadding(dp(12), dp(3), dp(8), dp(3));\n\n        clonedHeaderView = new TextView(this);\n        clonedHeaderView.setText("已双开应用 (0)");\n        clonedHeaderView.setTextSize(14);\n        clonedHeaderView.setTextColor(Color.rgb(35, 35, 35));\n        clonedHeaderView.setGravity(Gravity.CENTER_VERTICAL);\n        clonedHeaderRow.addView(clonedHeaderView, new LinearLayout.LayoutParams(0, dp(42), 1f));\n\n        toggleClonedButton = new Button(this);\n        toggleClonedButton.setText("展开");\n        toggleClonedButton.setAllCaps(false);\n        toggleClonedButton.setTextSize(12);\n        clonedHeaderRow.addView(toggleClonedButton, new LinearLayout.LayoutParams(dp(78), dp(42)));\n        root.addView(clonedHeaderRow, new LinearLayout.LayoutParams(\n                LinearLayout.LayoutParams.MATCH_PARENT, dp(48)));\n\n        clonedBatchActions = new LinearLayout(this);\n        clonedBatchActions.setOrientation(LinearLayout.HORIZONTAL);\n        clonedBatchActions.setPadding(dp(10), 0, dp(10), dp(4));\n        Button selectAllClonedButton = actionButton("全选已双开");\n        Button clearClonedButton = actionButton("清空选择");\n        clonedBatchActions.addView(selectAllClonedButton, weightedButtonParams());\n        clonedBatchActions.addView(clearClonedButton, weightedButtonParams());\n        clonedBatchActions.setVisibility(View.GONE);\n        root.addView(clonedBatchActions, new LinearLayout.LayoutParams(\n                LinearLayout.LayoutParams.MATCH_PARENT, dp(54)));\n\n        clonedAppsScroll = new ScrollView(this);\n        clonedAppsScroll.setFillViewport(true);\n        clonedAppsScroll.setVisibility(View.GONE);\n        clonedAppsList = new LinearLayout(this);\n        clonedAppsList.setOrientation(LinearLayout.VERTICAL);\n        clonedAppsList.setPadding(dp(8), 0, dp(8), dp(4));\n        clonedAppsScroll.addView(clonedAppsList, new ScrollView.LayoutParams(\n                ScrollView.LayoutParams.MATCH_PARENT, ScrollView.LayoutParams.WRAP_CONTENT));\n        root.addView(clonedAppsScroll, new LinearLayout.LayoutParams(\n                LinearLayout.LayoutParams.MATCH_PARENT, dp(230)));\n\n        toggleClonedButton.setOnClickListener(v -> {\n            clonedAppsExpanded = !clonedAppsExpanded;\n            toggleClonedButton.setText(clonedAppsExpanded ? "收起" : "展开");\n            clonedBatchActions.setVisibility(clonedAppsExpanded ? View.VISIBLE : View.GONE);\n            clonedAppsScroll.setVisibility(clonedAppsExpanded ? View.VISIBLE : View.GONE);\n            if (clonedAppsExpanded) updateClonedAppsList();\n        });\n        selectAllClonedButton.setOnClickListener(v -> {\n            for (AppEntry app : apps) if (app.cloned) app.selected = true;\n            adapter.notifyDataSetChanged();\n            updateSelectionState();\n            updateClonedAppsList();\n        });\n        clearClonedButton.setOnClickListener(v -> {\n            for (AppEntry app : apps) if (app.cloned) app.selected = false;\n            adapter.notifyDataSetChanged();\n            updateSelectionState();\n            updateClonedAppsList();\n        });\n\n        selectedView = new TextView(this);\n        selectedView.setText("已选择 0 个应用");'''
@@ -56,7 +58,7 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
           g = Path('app/build.gradle.kts')
-          s = g.read_text().replace('versionCode = 2', 'versionCode = 5').replace('versionName = "1.2"', 'versionName = "1.5"')
+          s = g.read_text().replace('versionCode = 2', 'versionCode = 6').replace('versionName = "1.2"', 'versionName = "1.6"')
           g.write_text(s)
           m = Path('app/src/main/AndroidManifest.xml')
           s = m.read_text().replace('@android:drawable/sym_def_app_icon', '@drawable/ic_launcher')
@@ -82,5 +84,5 @@ jobs:
           gradle --no-daemon :app:assembleDebug
       - uses: actions/upload-artifact@v4
         with:
-          name: DualApp999-v1.5-debug
+          name: DualApp999-v1.6-debug
           path: /tmp/project/dualapp999-v1.2-project/app/build/outputs/apk/debug/*.apk
